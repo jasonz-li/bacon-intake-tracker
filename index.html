@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>Bacon Intake Tracker</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>🥓 Bacon Intake</h1>
+    <div class="datenav" id="datenav">
+      <button class="icon" id="prevDay" aria-label="Previous day">‹</button>
+      <button class="datebtn" id="dateLabel">Today</button>
+      <input type="date" id="datePicker" hidden />
+      <button class="icon" id="nextDay" aria-label="Next day">›</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- DIARY -->
+    <section id="view-diary" class="view active">
+      <div class="card summary">
+        <div class="equation">
+          <div><strong id="sumGoal">0</strong><span>Goal</span></div>
+          <div class="op">−</div>
+          <div><strong id="sumFood">0</strong><span>Food</span></div>
+          <div class="op">+</div>
+          <div><strong id="sumExercise">0</strong><span>Exercise</span></div>
+          <div class="op">=</div>
+          <div class="remaining"><strong id="sumRemaining">0</strong><span>Remaining</span></div>
+        </div>
+        <div class="ringwrap">
+          <svg viewBox="0 0 120 120" class="ring">
+            <circle cx="60" cy="60" r="50" class="ring-bg" />
+            <circle cx="60" cy="60" r="50" class="ring-fg" id="calRing" />
+          </svg>
+          <div class="ringtext"><strong id="ringPct">0%</strong><span>of goal</span></div>
+        </div>
+        <div class="macros" id="macroBars"></div>
+      </div>
+
+      <div id="meals"></div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Exercise</h2>
+          <span class="muted" id="exTotal">0 kcal</span>
+        </div>
+        <ul class="entries" id="exerciseList"></ul>
+        <button class="add" id="addExercise">+ Add exercise</button>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Water</h2>
+          <span class="muted" id="waterLabel">0 / 8 cups</span>
+        </div>
+        <div class="water" id="waterCups"></div>
+        <div class="row gap">
+          <button class="btn ghost" id="waterMinus">− cup</button>
+          <button class="btn" id="waterPlus">+ cup</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Notes</h2></div>
+        <textarea id="dayNotes" rows="3" placeholder="How did today go?"></textarea>
+      </div>
+    </section>
+
+    <!-- FOODS -->
+    <section id="view-foods" class="view">
+      <div class="card">
+        <div class="card-head">
+          <h2>My Foods</h2>
+          <button class="btn small" id="newFoodBtn">+ New food</button>
+        </div>
+        <input type="search" id="myFoodsFilter" placeholder="Filter my foods…" />
+        <ul class="entries" id="myFoodsList"></ul>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>My Meals</h2></div>
+        <p class="muted small">Save any meal from the diary as a reusable meal (tap “Save as meal” under it).</p>
+        <ul class="entries" id="myMealsList"></ul>
+      </div>
+    </section>
+
+    <!-- PROGRESS -->
+    <section id="view-progress" class="view">
+      <div class="card">
+        <div class="card-head">
+          <h2>Calories — last 7 days</h2>
+          <span class="muted" id="avgCal"></span>
+        </div>
+        <div id="calChart" class="chart"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Macros — last 7 days avg</h2>
+        </div>
+        <div id="macroAvg"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Weight</h2>
+          <span class="muted" id="weightDelta"></span>
+        </div>
+        <div id="weightChart" class="chart"></div>
+        <form class="row gap" id="weightForm">
+          <input type="number" step="0.1" min="0" id="weightInput" placeholder="Weight" required />
+          <span class="unit" id="weightUnitLabel">lb</span>
+          <button class="btn" type="submit">Log</button>
+        </form>
+        <ul class="entries" id="weightList"></ul>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Streak</h2></div>
+        <p><strong id="streak">0</strong> day(s) logged in a row 🔥</p>
+      </div>
+    </section>
+
+    <!-- GOALS -->
+    <section id="view-goals" class="view">
+      <form class="card" id="goalsForm">
+        <div class="card-head"><h2>Daily Goals</h2></div>
+        <label>Calories (kcal)
+          <input type="number" id="goalCalories" min="0" required />
+        </label>
+        <div class="seg" id="macroMode">
+          <button type="button" data-mode="pct" class="on">Macros by %</button>
+          <button type="button" data-mode="g">Macros by grams</button>
+        </div>
+        <div class="grid3">
+          <label>Protein <span class="hint" id="hintP"></span>
+            <input type="number" id="goalProtein" min="0" step="1" required />
+          </label>
+          <label>Carbs <span class="hint" id="hintC"></span>
+            <input type="number" id="goalCarbs" min="0" step="1" required />
+          </label>
+          <label>Fat <span class="hint" id="hintF"></span>
+            <input type="number" id="goalFat" min="0" step="1" required />
+          </label>
+        </div>
+        <p class="muted small" id="pctCheck"></p>
+        <label>Water (cups / day)
+          <input type="number" id="goalWater" min="0" step="1" />
+        </label>
+        <button class="btn block" type="submit">Save goals</button>
+      </form>
+
+      <form class="card" id="calcForm">
+        <div class="card-head"><h2>Goal Calculator</h2></div>
+        <p class="muted small">Estimates your daily calories using the Mifflin‑St Jeor formula.</p>
+        <div class="seg" id="unitSeg">
+          <button type="button" data-unit="imperial" class="on">lb / in</button>
+          <button type="button" data-unit="metric">kg / cm</button>
+        </div>
+        <div class="grid2">
+          <label>Sex
+            <select id="cSex"><option value="m">Male</option><option value="f">Female</option></select>
+          </label>
+          <label>Age <input type="number" id="cAge" min="10" max="100" required /></label>
+          <label>Weight <span class="hint" id="cWeightUnit">lb</span><input type="number" id="cWeight" step="0.1" required /></label>
+          <label>Height <span class="hint" id="cHeightUnit">in</span><input type="number" id="cHeight" step="0.1" required /></label>
+        </div>
+        <label>Activity
+          <select id="cActivity">
+            <option value="1.2">Sedentary (desk job)</option>
+            <option value="1.375">Lightly active</option>
+            <option value="1.55">Active</option>
+            <option value="1.725">Very active</option>
+          </select>
+        </label>
+        <label>Goal
+          <select id="cGoal">
+            <option value="-1000">Lose 2 lb (0.9 kg) / week</option>
+            <option value="-500" selected>Lose 1 lb (0.45 kg) / week</option>
+            <option value="-250">Lose 0.5 lb (0.23 kg) / week</option>
+            <option value="0">Maintain</option>
+            <option value="250">Gain 0.5 lb / week</option>
+            <option value="500">Gain 1 lb / week</option>
+          </select>
+        </label>
+        <div class="calc-result" id="calcResult" hidden></div>
+        <button class="btn block" type="submit">Calculate</button>
+      </form>
+
+      <div class="card">
+        <div class="card-head"><h2>Your data</h2></div>
+        <p class="muted small">Everything is stored in this browser only. Back it up now and then.</p>
+        <div class="row gap wrap">
+          <button class="btn ghost" id="exportBtn">Export backup</button>
+          <label class="btn ghost filebtn">Import backup<input type="file" id="importFile" accept="application/json" hidden /></label>
+          <button class="btn danger" id="resetBtn">Erase everything</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button data-view="diary" class="on"><span>📒</span>Diary</button>
+    <button data-view="foods"><span>🍎</span>Foods</button>
+    <button data-view="progress"><span>📈</span>Progress</button>
+    <button data-view="goals"><span>🎯</span>Goals</button>
+  </nav>
+
+  <!-- Add food modal -->
+  <dialog id="foodDialog">
+    <form method="dialog" class="dlg">
+      <div class="dlg-head">
+        <h2 id="foodDlgTitle">Add food</h2>
+        <button class="icon" value="cancel" aria-label="Close">✕</button>
+      </div>
+      <div class="seg" id="foodTabs">
+        <button type="button" data-tab="search" class="on">Search</button>
+        <button type="button" data-tab="mine">My Foods</button>
+        <button type="button" data-tab="manual">Manual</button>
+        <button type="button" data-tab="quick">Quick add</button>
+      </div>
+
+      <div class="tab" data-tab="search">
+        <div class="row gap">
+          <input type="search" id="searchInput" placeholder="Search foods or enter barcode…" />
+          <button type="button" class="btn" id="searchBtn">Go</button>
+          <button type="button" class="btn ghost" id="scanBtn" title="Scan barcode" hidden>📷</button>
+        </div>
+        <video id="scanVideo" playsinline muted hidden></video>
+        <p class="muted small">Powered by the free Open Food Facts database.</p>
+        <ul class="entries" id="searchResults"></ul>
+      </div>
+
+      <div class="tab" data-tab="mine" hidden>
+        <input type="search" id="mineFilter" placeholder="Filter…" />
+        <ul class="entries" id="mineList"></ul>
+      </div>
+
+      <div class="tab" data-tab="manual" hidden>
+        <label>Food name <input id="fName" required /></label>
+        <div class="grid2">
+          <label>Serving size <input id="fServing" placeholder="e.g. 1 cup, 100 g" /></label>
+          <label>Servings eaten <input type="number" id="fQty" step="0.25" min="0" value="1" /></label>
+        </div>
+        <p class="muted small">Nutrition per 1 serving:</p>
+        <div class="grid2">
+          <label>Calories <input type="number" id="fCal" min="0" step="1" /></label>
+          <label>Protein (g) <input type="number" id="fP" min="0" step="0.1" /></label>
+          <label>Carbs (g) <input type="number" id="fC" min="0" step="0.1" /></label>
+          <label>Fat (g) <input type="number" id="fF" min="0" step="0.1" /></label>
+        </div>
+        <p class="muted small" id="fCalcHint"></p>
+        <label class="check"><input type="checkbox" id="fSave" checked /> Save to My Foods</label>
+        <button type="button" class="btn block" id="fAdd">Add to diary</button>
+      </div>
+
+      <div class="tab" data-tab="quick" hidden>
+        <p class="muted small">Just log the numbers. No food name needed.</p>
+        <div class="grid2">
+          <label>Calories <input type="number" id="qCal" min="0" /></label>
+          <label>Protein (g) <input type="number" id="qP" min="0" step="0.1" /></label>
+          <label>Carbs (g) <input type="number" id="qC" min="0" step="0.1" /></label>
+          <label>Fat (g) <input type="number" id="qF" min="0" step="0.1" /></label>
+        </div>
+        <button type="button" class="btn block" id="qAdd">Quick add</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Exercise modal -->
+  <dialog id="exDialog">
+    <form method="dialog" class="dlg" id="exForm">
+      <div class="dlg-head">
+        <h2>Add exercise</h2>
+        <button class="icon" value="cancel" aria-label="Close">✕</button>
+      </div>
+      <label>Exercise <input id="exName" list="exPresets" placeholder="e.g. Running" /></label>
+      <datalist id="exPresets"></datalist>
+      <div class="grid2">
+        <label>Minutes <input type="number" id="exMin" min="0" /></label>
+        <label>Calories burned <input type="number" id="exCal" min="0" /></label>
+      </div>
+      <p class="muted small" id="exHint">Pick a preset and enter minutes to estimate calories.</p>
+      <button type="button" class="btn block" id="exAdd">Add</button>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
