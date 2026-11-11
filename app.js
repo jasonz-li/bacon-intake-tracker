@@ -6,17 +6,23 @@
   const KEY = "bacon-intake-v1";
   const MEALS = ["Breakfast", "Lunch", "Dinner", "Snacks"];
   const defaults = () => ({
-    goals: { calories: 2000, protein: 30, carbs: 40, fat: 30, water: 8, macroMode: "pct" },
+    goals: { calories: 2000, protein: 30, carbs: 40, fat: 30, macroMode: "pct" },
     profile: { unit: "imperial" },
+    settings: { accent: "purple", custom: "#7c3aed", appearance: "auto" },
     days: {},
     foods: [],
     savedMeals: [],
     weights: [],
   });
 
+  const load = (data) => {
+    const s = Object.assign(defaults(), data || {});
+    s.settings = Object.assign(defaults().settings, s.settings);
+    return s;
+  };
   let state;
   try {
-    state = Object.assign(defaults(), JSON.parse(localStorage.getItem(KEY)) || {});
+    state = load(JSON.parse(localStorage.getItem(KEY)));
   } catch {
     state = defaults();
   }
@@ -42,9 +48,9 @@
   const day = (date = current, create = false) => {
     let d = state.days[date];
     if (!d && create) {
-      d = state.days[date] = { meals: Object.fromEntries(MEALS.map((m) => [m, []])), exercise: [], water: 0, notes: "" };
+      d = state.days[date] = { meals: Object.fromEntries(MEALS.map((m) => [m, []])), exercise: [], notes: "" };
     }
-    return d || { meals: Object.fromEntries(MEALS.map((m) => [m, []])), exercise: [], water: 0, notes: "" };
+    return d || { meals: Object.fromEntries(MEALS.map((m) => [m, []])), exercise: [], notes: "" };
   };
 
   // Each entry: { id, name, serving, qty, cal, p, c, f } where cal/p/c/f are PER serving.
@@ -156,7 +162,7 @@
         <div class="card-head"><h2>${m}</h2><span class="muted">${r0(t.cal)} kcal</span></div>
         <ul class="entries">${items}</ul>
         <div class="row" style="justify-content:space-between;flex-wrap:wrap">
-          <button class="add" data-add="${m}">+ Add food</button>
+          <span><button class="add" data-add="${m}">+ Add food</button><button class="meal-scan" data-scan="${m}" aria-label="Scan barcode">📷</button></span>
           <span>
             <button class="link" data-copy="${m}">Copy from yesterday</button>
             ${list.length ? `<button class="link" data-savemeal="${m}">Save as meal</button>` : ""}
@@ -175,11 +181,6 @@
         </li>`).join("")
       : `<li class="empty">No exercise logged</li>`;
 
-    // Water
-    const wg = state.goals.water || 8;
-    $("#waterLabel").textContent = `${d.water} / ${wg} cups`;
-    $("#waterCups").innerHTML = Array.from({ length: Math.max(wg, d.water) }, (_, i) => `<div class="cup ${i < d.water ? "full" : ""}"></div>`).join("");
-
     const notes = $("#dayNotes");
     if (document.activeElement !== notes) notes.value = d.notes || "";
   }
@@ -187,6 +188,7 @@
   $("#meals").addEventListener("click", (e) => {
     const t = e.target;
     if (t.dataset.add) return openFoodDialog(t.dataset.add);
+    if (t.dataset.scan) return openScanner(t.dataset.scan);
     if (t.dataset.copy) return copyMeal(t.dataset.copy);
     if (t.dataset.savemeal) return saveMeal(t.dataset.savemeal);
     const li = t.closest("li[data-id]");
@@ -235,8 +237,6 @@
     save(); render();
   });
 
-  $("#waterPlus").onclick = () => { day(current, true).water++; save(); render(); };
-  $("#waterMinus").onclick = () => { const d = day(current, true); d.water = Math.max(0, d.water - 1); save(); render(); };
   $("#dayNotes").addEventListener("input", (e) => { day(current, true).notes = e.target.value; save(); });
 
   // ---------- Add food dialog ----------
@@ -258,7 +258,6 @@
     setFoodTab(state.foods.length || state.savedMeals.length ? "mine" : "search");
     foodDlg.showModal();
   }
-  foodDlg.addEventListener("close", stopScan);
 
   function addEntry(e, meal = targetMeal) {
     day(current, true).meals[meal].push({ id: uid(), name: e.name, serving: e.serving || "", qty: num(e.qty) || 1, cal: num(e.cal), p: num(e.p), c: num(e.c), f: num(e.f) });
@@ -269,6 +268,10 @@
     const key = (f.name + "|" + f.serving).toLowerCase();
     const existing = state.foods.find((x) => (x.name + "|" + x.serving).toLowerCase() === key);
     const data = { name: f.name, serving: f.serving || "", cal: num(f.cal), p: num(f.p), c: num(f.c), f: num(f.f) };
+    if (f.barcode) {
+      state.foods.forEach((x) => { if (x.barcode === f.barcode && x !== existing) delete x.barcode; });
+      data.barcode = f.barcode;
+    }
     if (existing) Object.assign(existing, data, { used: Date.now() });
     else state.foods.push({ id: uid(), ...data, used: Date.now() });
   }
@@ -279,6 +282,13 @@
     $("#fQty").value = 1;
     $("#fSave").checked = true;
     $("#fCalcHint").textContent = "";
+    setBarcode(null);
+  }
+  let pendingBarcode = null;
+  function setBarcode(code) {
+    pendingBarcode = code || null;
+    $("#fBarcode").hidden = !pendingBarcode;
+    $("#fBarcode").textContent = pendingBarcode ? `Barcode ${pendingBarcode}. Saved with this food, so the next scan is instant.` : "";
   }
   function fillManual(f) {
     $("#fName").value = f.name || "";
@@ -288,6 +298,7 @@
     $("#fC").value = f.c != null ? r1(f.c) : "";
     $("#fF").value = f.f != null ? r1(f.f) : "";
     $("#fQty").value = 1;
+    setBarcode(f.barcode);
     updateCalcHint();
     setFoodTab("manual");
   }
@@ -302,8 +313,8 @@
     if (!name) { $("#fName").focus(); return toast("Give it a name"); }
     const p = num($("#fP").value), c = num($("#fC").value), f = num($("#fF").value);
     const cal = $("#fCal").value !== "" ? num($("#fCal").value) : p * 4 + c * 4 + f * 9;
-    const food = { name, serving: $("#fServing").value.trim(), cal, p, c, f, qty: num($("#fQty").value) || 1 };
-    if ($("#fSave").checked) rememberFood(food);
+    const food = { name, serving: $("#fServing").value.trim(), cal, p, c, f, qty: num($("#fQty").value) || 1, barcode: pendingBarcode };
+    if ($("#fSave").checked || pendingBarcode) rememberFood(food);
     addEntry(food);
     foodDlg.close();
     toast(`Added ${name}`);
@@ -373,6 +384,7 @@
   async function doSearch() {
     const q = $("#searchInput").value.trim();
     if (!q) return;
+    if (/^\d{8,14}$/.test(q)) return lookupBarcode(q, targetMeal);
     const out = $("#searchResults");
     out.innerHTML = `<li class="empty">Searching…</li>`;
     try {
@@ -411,9 +423,41 @@
     } else fillManual(f);
   });
 
-  // Barcode scan. Uses the built-in BarcodeDetector where it exists (Android Chrome),
+  // Barcode → food. Checks your own saved foods first (works offline), then Open Food Facts.
+  async function lookupBarcode(code, meal) {
+    code = code.replace(/\D/g, "");
+    if (!code) return;
+    // UPC-A (12 digits) and EAN-13 with a leading 0 are the same product
+    const same = (a, b) => a === b || a.padStart(13, "0") === b.padStart(13, "0");
+    if (!foodDlg.open) openFoodDialog(meal);
+    const mine = state.foods.find((f) => f.barcode && same(f.barcode, code));
+    if (mine) { fillManual(mine); return toast("Found in My Foods"); }
+    clearManual();
+    setFoodTab("manual");
+    setBarcode(code);
+    $("#fName").placeholder = "Looking it up…";
+    try {
+      const r = await fetch(`${OFF}/api/v2/product/${code}.json?fields=product_name,generic_name,brands,serving_size,nutriments`);
+      const j = await r.json();
+      const food = j.status === 1 ? offToFood(j.product) : null;
+      if (food && (food.cal > 0 || food.p || food.c || food.f)) {
+        fillManual({ ...food, barcode: code });
+        toast("Found it! Check the servings and add");
+      } else {
+        toast("Not in the database yet. Enter it once and it'll be remembered");
+        $("#fName").focus();
+      }
+    } catch {
+      toast("No connection. Enter it manually and it'll be remembered");
+    } finally {
+      $("#fName").placeholder = "";
+    }
+  }
+
+  // Barcode scanner. Uses the built-in BarcodeDetector where it exists (Android Chrome),
   // otherwise the bundled ZXing decoder (iPhone Safari has no BarcodeDetector).
-  let scanStream = null;
+  const scanDlg = $("#scanDialog");
+  let scanStream = null, scanMeal = "Breakfast", scanSession = 0;
   if (navigator.mediaDevices?.getUserMedia) $("#scanBtn").hidden = false;
   let zxingLoad = null;
   const loadZxing = () =>
@@ -439,41 +483,66 @@
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     return async (v) => {
       if (!v.videoWidth) return;
-      const scale = Math.min(1, 960 / v.videoWidth);
-      canvas.width = v.videoWidth * scale; canvas.height = v.videoHeight * scale;
-      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+      // Decode only the middle band of the picture (where the frame is), which is faster and more reliable.
+      const sw = v.videoWidth, sh = Math.round(v.videoHeight * 0.5), sy = Math.round(v.videoHeight * 0.25);
+      const scale = Math.min(1, 1000 / sw);
+      canvas.width = sw * scale; canvas.height = sh * scale;
+      ctx.drawImage(v, 0, sy, sw, sh, 0, 0, canvas.width, canvas.height);
       try {
         const bmp = new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(canvas)));
         return reader.decodeWithState(bmp).getText();
       } catch { return undefined; } finally { reader.reset(); }
     };
   }
-  $("#scanBtn").onclick = async () => {
-    if (scanStream) return stopScan();
+  async function openScanner(meal) {
+    scanMeal = meal || defaultMeal();
+    $("#scanCode").value = "";
+    $("#scanStatus").textContent = "Starting camera…";
+    scanDlg.showModal();
+    const session = ++scanSession;
     try {
-      const decode = await makeDecoder();
-      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } }, audio: false });
+      const [decode, stream] = await Promise.all([
+        makeDecoder(),
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }),
+      ]);
+      if (session !== scanSession || !scanDlg.open) { stream.getTracks().forEach((t) => t.stop()); return; }
+      scanStream = stream;
       const v = $("#scanVideo");
       v.setAttribute("playsinline", ""); // required on iOS or the video goes fullscreen
-      v.srcObject = scanStream; v.hidden = false; await v.play();
-      toast("Point the camera at a barcode");
+      v.srcObject = stream; await v.play();
+      $("#scanStatus").textContent = "Line up the barcode inside the box";
       const tick = async () => {
-        if (!scanStream) return;
+        if (session !== scanSession || !scanStream) return;
         const code = await decode(v).catch(() => undefined);
-        if (code) {
+        if (code && session === scanSession) {
           if (navigator.vibrate) navigator.vibrate(60);
-          $("#searchInput").value = code; stopScan(); return doSearch();
+          closeScanner();
+          return lookupBarcode(code, scanMeal);
         }
-        setTimeout(tick, 120);
+        setTimeout(tick, 100);
       };
       tick();
-    } catch { stopScan(); toast("Camera not available — allow camera access in Settings"); }
-  };
+    } catch {
+      $("#scanStatus").textContent = "Camera unavailable. Allow camera access in Settings → Safari, or type the number below.";
+    }
+  }
   function stopScan() {
+    scanSession++;
     if (scanStream) scanStream.getTracks().forEach((t) => t.stop());
     scanStream = null;
-    const v = $("#scanVideo"); v.hidden = true; v.srcObject = null;
+    $("#scanVideo").srcObject = null;
   }
+  function closeScanner() { stopScan(); if (scanDlg.open) scanDlg.close(); }
+  scanDlg.addEventListener("close", stopScan);
+  $("#scanCancel").onclick = closeScanner;
+  $("#scanBtn").onclick = () => openScanner(targetMeal);
+  $("#scanManual").onsubmit = (e) => {
+    e.preventDefault();
+    const code = $("#scanCode").value.replace(/\D/g, "");
+    if (code.length < 6) return toast("That doesn't look like a barcode");
+    closeScanner();
+    lookupBarcode(code, scanMeal);
+  };
 
   // ---------- Exercise dialog ----------
   // MET values; kcal = MET * kg * hours
@@ -639,19 +708,21 @@
     $("#goalProtein").value = r0(g.protein);
     $("#goalCarbs").value = r0(g.carbs);
     $("#goalFat").value = r0(g.fat);
-    $("#goalWater").value = g.water;
     $$("#macroMode button").forEach((b) => b.classList.toggle("on", b.dataset.mode === g.macroMode));
     updateGoalHints();
     const u = state.profile.unit;
     $$("#unitSeg button").forEach((b) => b.classList.toggle("on", b.dataset.unit === u));
     $("#cWeightUnit").textContent = u === "metric" ? "kg" : "lb";
-    $("#cHeightUnit").textContent = u === "metric" ? "cm" : "in";
+    $("#cHeight").placeholder = u === "metric" ? "e.g. 173" : `e.g. 5'8"`;
+    $("#cHeight").inputMode = u === "metric" ? "decimal" : "text";
     const pr = state.profile;
     if (pr.sex) $("#cSex").value = pr.sex;
     if (pr.age) $("#cAge").value = pr.age;
     if (pr.activity) $("#cActivity").value = pr.activity;
     if (pr.goal) $("#cGoal").value = pr.goal;
-    if (pr.heightCm) $("#cHeight").value = r1(u === "metric" ? pr.heightCm : pr.heightCm / 2.54);
+    if (pr.heightCm && document.activeElement !== $("#cHeight")) $("#cHeight").value = u === "metric" ? r0(pr.heightCm) : fmtFtIn(pr.heightCm / 2.54);
+    updateHeightHint();
+    renderAppearance();
     if (!$("#cWeight").value) {
       const w = [...state.weights].sort((a, b) => a.date.localeCompare(b.date)).pop();
       if (w) $("#cWeight").value = r1(toDisp(w.kg));
@@ -697,7 +768,7 @@
     const mode = curMode();
     const P = num($("#goalProtein").value), C = num($("#goalCarbs").value), F = num($("#goalFat").value);
     if (mode === "pct" && r0(P + C + F) !== 100) return toast("Macro % must add up to 100");
-    state.goals = { calories: num($("#goalCalories").value), protein: P, carbs: C, fat: F, water: num($("#goalWater").value) || 8, macroMode: mode };
+    state.goals = { calories: num($("#goalCalories").value), protein: P, carbs: C, fat: F, macroMode: mode };
     save(); render();
     toast("Goals saved");
   };
@@ -706,9 +777,9 @@
     (b.onclick = () => {
       if (b.dataset.unit === state.profile.unit) return;
       const toMetric = b.dataset.unit === "metric";
-      const w = num($("#cWeight").value), h = num($("#cHeight").value);
+      const w = num($("#cWeight").value), cm = heightCm();
       if (w) $("#cWeight").value = r1(toMetric ? w / 2.20462 : w * 2.20462);
-      if (h) $("#cHeight").value = r1(toMetric ? h * 2.54 : h / 2.54);
+      if (cm) $("#cHeight").value = toMetric ? r0(cm) : fmtFtIn(cm / 2.54);
       state.profile.unit = b.dataset.unit;
       save(); renderGoals();
     })
@@ -717,7 +788,8 @@
     e.preventDefault();
     const metric = isMetric();
     const kg = metric ? num($("#cWeight").value) : num($("#cWeight").value) / 2.20462;
-    const cm = metric ? num($("#cHeight").value) : num($("#cHeight").value) * 2.54;
+    const cm = heightCm();
+    if (!cm || cm < 90 || cm > 250) { $("#cHeight").focus(); return toast(metric ? "Enter height in cm" : `Enter height like 5'8"`); }
     const age = num($("#cAge").value), sex = $("#cSex").value;
     const act = num($("#cActivity").value), adj = num($("#cGoal").value);
     const bmr = 10 * kg + 6.25 * cm - 5 * age + (sex === "m" ? 5 : -161);
@@ -740,6 +812,102 @@
     };
   };
 
+  // Height: accepts 5'8, 5'8", 5’8”, 5 8, 5ft 8in, 5.8 (as 5'8"), 68 (inches), 5.5ft
+  function parseFtIn(str) {
+    let s = String(str).trim().toLowerCase()
+      .replace(/[’‘′`´]/g, "'").replace(/[”“″]/g, '"').replace(/''/g, '"')
+      .replace(/\s+/g, " ");
+    if (!s) return null;
+    let m;
+    if ((m = s.match(/^(\d+(?:\.\d+)?) ?(?:ft|feet|foot|f)$/))) return +m[1] * 12;
+    if ((m = s.match(/^(\d+(?:\.\d+)?) ?(?:"|in|inch|inches)$/))) return +m[1];
+    if ((m = s.match(/^(\d+) ?(?:'|ft|feet|foot|f)[ ,]?(?:(\d+(?:\.\d+)?) ?(?:"|in|inch|inches)?)?$/))) return +m[1] * 12 + (+m[2] || 0);
+    if ((m = s.match(/^(\d) ?[ .,\-/] ?(\d{1,2})$/)) && +m[2] < 12) return +m[1] * 12 + +m[2];
+    if ((m = s.match(/^\d+(?:\.\d+)?$/))) { const n = +s; return n < 9 ? n * 12 : n; }
+    return null;
+  }
+  function fmtFtIn(inches) {
+    let ft = Math.floor(inches / 12), i = Math.round(inches - ft * 12);
+    if (i === 12) { ft++; i = 0; }
+    return `${ft}'${i}"`;
+  }
+  function heightCm() {
+    const v = $("#cHeight").value;
+    if (isMetric()) return num(v) || null;
+    const i = parseFtIn(v);
+    return i ? i * 2.54 : null;
+  }
+  function updateHeightHint() {
+    const cm = heightCm();
+    $("#cHeightUnit").textContent = !cm ? (isMetric() ? "cm" : "ft / in") : isMetric() ? fmtFtIn(cm / 2.54) : `${fmtFtIn(cm / 2.54)} · ${r0(cm)} cm`;
+  }
+  $("#cHeight").addEventListener("input", updateHeightHint);
+  $("#cHeight").addEventListener("blur", () => {
+    const cm = heightCm();
+    if (cm && !isMetric()) $("#cHeight").value = fmtFtIn(cm / 2.54);
+  });
+
+  // ---------- Appearance ----------
+  const ACCENTS = {
+    purple: ["#7c3aed", "#a78bfa"],
+    indigo: ["#4f46e5", "#818cf8"],
+    pink: ["#db2777", "#f472b6"],
+    blue: ["#2563eb", "#60a5fa"],
+    teal: ["#0f766e", "#2dd4bf"],
+    green: ["#15803d", "#4ade80"],
+    orange: ["#ea580c", "#fb923c"],
+  };
+  const hexRgb = (h) => { h = h.replace("#", ""); if (h.length === 3) h = [...h].map((c) => c + c).join(""); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); };
+  const rgbHex = (a) => "#" + a.map((x) => Math.round(Math.max(0, Math.min(255, x))).toString(16).padStart(2, "0")).join("");
+  const mix = (h, to, t) => { const a = hexRgb(h), b = hexRgb(to); return rgbHex(a.map((x, i) => x + (b[i] - x) * t)); };
+  const lum = (h) => { const [r, g, b] = hexRgb(h).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  // Darken a color until white text on it is readable
+  const readableOnWhite = (h) => { let c = h; for (let i = 0; i < 12 && contrast(c, "#ffffff") < 4.5; i++) c = mix(c, "#000000", 0.08); return c; };
+
+  function applyTheme() {
+    const st = state.settings;
+    let [light, dark] = st.accent === "custom" ? [st.custom, mix(st.custom, "#ffffff", 0.35)] : ACCENTS[st.accent] || ACCENTS.purple;
+    light = readableOnWhite(light);
+    const top = mix(light, "#000000", 0.12), topDark = mix(light, "#000000", 0.62);
+    const root = document.documentElement.style;
+    root.setProperty("--brand-l", light);
+    root.setProperty("--brand-d", dark);
+    root.setProperty("--top-l", top);
+    root.setProperty("--top-d", topDark);
+    root.setProperty("--on-l", "#ffffff");
+    root.setProperty("--on-d", contrast(dark, "#ffffff") >= 4.5 ? "#ffffff" : mix(dark, "#000000", 0.82));
+    if (st.appearance === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", st.appearance);
+    const isDark = st.appearance === "dark" || (st.appearance === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.querySelector('meta[name="theme-color"]').setAttribute("content", isDark ? topDark : top);
+  }
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", applyTheme);
+
+  function renderAppearance() {
+    const st = state.settings;
+    $("#swatches").innerHTML =
+      Object.entries(ACCENTS).map(([k, [c]]) => `<button type="button" class="swatch ${st.accent === k ? "on" : ""}" data-accent="${k}" style="background:${c}" aria-label="${k}"></button>`).join("") +
+      `<label class="swatch custom ${st.accent === "custom" ? "on" : ""}" ${st.accent === "custom" ? `style="background:${st.custom}"` : ""} aria-label="Custom color"><input type="color" id="customColor" value="${st.custom}" /></label>`;
+    $$("#appearanceSeg button").forEach((b) => b.classList.toggle("on", b.dataset.appearance === st.appearance));
+  }
+  $("#swatches").addEventListener("click", (e) => {
+    const k = e.target.dataset.accent;
+    if (!k) return;
+    state.settings.accent = k;
+    save(); applyTheme(); renderAppearance();
+  });
+  $("#swatches").addEventListener("input", (e) => {
+    if (e.target.id !== "customColor") return;
+    state.settings.accent = "custom";
+    state.settings.custom = e.target.value;
+    applyTheme();
+    e.target.parentElement.style.background = e.target.value;
+    $$(".swatch").forEach((s) => s.classList.toggle("on", s.classList.contains("custom")));
+  });
+  $("#swatches").addEventListener("change", (e) => { if (e.target.id === "customColor") save(); });
+  $$("#appearanceSeg button").forEach((b) => (b.onclick = () => { state.settings.appearance = b.dataset.appearance; save(); applyTheme(); renderAppearance(); }));
+
   // Data
   $("#exportBtn").onclick = () => {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
@@ -756,8 +924,8 @@
       const data = JSON.parse(await file.text());
       if (!data || typeof data !== "object" || !data.goals || !data.days) throw new Error();
       if (!confirm("Replace all current data with this backup?")) return;
-      state = Object.assign(defaults(), data);
-      save(); render();
+      state = load(data);
+      save(); applyTheme(); render();
       toast("Backup restored");
     } catch { toast("That file isn't a valid backup"); }
     e.target.value = "";
@@ -765,7 +933,7 @@
   $("#resetBtn").onclick = () => {
     if (!confirm("Erase ALL your data? This can't be undone.")) return;
     state = defaults();
-    save(); render();
+    save(); applyTheme(); render();
     toast("All data erased");
   };
 
@@ -794,5 +962,6 @@
 
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
 
+  applyTheme();
   render();
 })();
