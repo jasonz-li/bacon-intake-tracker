@@ -84,11 +84,6 @@
 
   $("#prevDay").onclick = () => { current = addDays(current, -1); render(); };
   $("#nextDay").onclick = () => { current = addDays(current, 1); render(); };
-  $("#dateLabel").onclick = () => {
-    const p = $("#datePicker");
-    p.value = current;
-    if (p.showPicker) { p.hidden = false; p.showPicker(); p.hidden = true; } else { current = today(); render(); }
-  };
   $("#datePicker").onchange = (e) => { if (e.target.value) { current = e.target.value; render(); } };
 
   function dateLabel(s) {
@@ -102,6 +97,7 @@
   // ---------- Diary ----------
   function renderDiary() {
     $("#dateLabel").textContent = dateLabel(current);
+    $("#datePicker").value = current;
     const d = day();
     const tot = dayTotals(current);
     const ex = exerciseTotal(current);
@@ -415,26 +411,63 @@
     } else fillManual(f);
   });
 
-  // Barcode scan (where the browser supports BarcodeDetector)
+  // Barcode scan. Uses the built-in BarcodeDetector where it exists (Android Chrome),
+  // otherwise the bundled ZXing decoder (iPhone Safari has no BarcodeDetector).
   let scanStream = null;
-  if ("BarcodeDetector" in window && navigator.mediaDevices?.getUserMedia) $("#scanBtn").hidden = false;
+  if (navigator.mediaDevices?.getUserMedia) $("#scanBtn").hidden = false;
+  let zxingLoad = null;
+  const loadZxing = () =>
+    (zxingLoad ||= new Promise((ok, fail) => {
+      const sc = document.createElement("script");
+      sc.src = "vendor/zxing.min.js";
+      sc.onload = () => ok(window.ZXing);
+      sc.onerror = () => { zxingLoad = null; fail(new Error("zxing")); };
+      document.head.appendChild(sc);
+    }));
+  async function makeDecoder() {
+    if ("BarcodeDetector" in window) {
+      try {
+        const d = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] });
+        return async (v) => (await d.detect(v))[0]?.rawValue;
+      } catch {}
+    }
+    const Z = await loadZxing();
+    const hints = new Map([[Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E]], [Z.DecodeHintType.TRY_HARDER, true]]);
+    const reader = new Z.MultiFormatReader();
+    reader.setHints(hints);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    return async (v) => {
+      if (!v.videoWidth) return;
+      const scale = Math.min(1, 960 / v.videoWidth);
+      canvas.width = v.videoWidth * scale; canvas.height = v.videoHeight * scale;
+      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+      try {
+        const bmp = new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(canvas)));
+        return reader.decodeWithState(bmp).getText();
+      } catch { return undefined; } finally { reader.reset(); }
+    };
+  }
   $("#scanBtn").onclick = async () => {
     if (scanStream) return stopScan();
     try {
-      const detector = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e"] });
-      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      const decode = await makeDecoder();
+      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } }, audio: false });
       const v = $("#scanVideo");
+      v.setAttribute("playsinline", ""); // required on iOS or the video goes fullscreen
       v.srcObject = scanStream; v.hidden = false; await v.play();
+      toast("Point the camera at a barcode");
       const tick = async () => {
         if (!scanStream) return;
-        try {
-          const codes = await detector.detect(v);
-          if (codes.length) { $("#searchInput").value = codes[0].rawValue; stopScan(); return doSearch(); }
-        } catch {}
-        requestAnimationFrame(tick);
+        const code = await decode(v).catch(() => undefined);
+        if (code) {
+          if (navigator.vibrate) navigator.vibrate(60);
+          $("#searchInput").value = code; stopScan(); return doSearch();
+        }
+        setTimeout(tick, 120);
       };
       tick();
-    } catch { stopScan(); toast("Camera not available"); }
+    } catch { stopScan(); toast("Camera not available — allow camera access in Settings"); }
   };
   function stopScan() {
     if (scanStream) scanStream.getTracks().forEach((t) => t.stop());
@@ -758,6 +791,8 @@
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
+
+  if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
 
   render();
 })();

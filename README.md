@@ -32,7 +32,12 @@ python3 -m http.server 8000
 # then open http://localhost:8000
 ```
 
-### Put it on your phone for free
-Turn on **GitHub Pages** for this repo (Settings → Pages → deploy from branch, root folder). Open the URL on your phone and choose "Add to Home Screen".
+### Put it on your iPhone (free)
+1. Host it: make the repo public, then go to **Settings → Pages**, choose "Deploy from a branch", pick the branch and `/ (root)`, and save. Private repos need GitHub Pro for Pages. If you'd rather keep it private, Netlify and Cloudflare Pages are free alternatives.
+2. On the iPhone, open the Pages URL **in Safari**.
+3. Tap **Share → Add to Home Screen**.
+4. Open it from the home-screen icon. It runs full-screen like a normal app and works offline.
 
-> Data is stored per browser/device. Use **Goals → Export backup** to move it or keep it safe.
+> Log your food from the home-screen app, not a Safari tab. iOS keeps them as separate storage, and Safari can clear website data that hasn't been used for a while. Use **Goals → Export backup** now and then.
+
+Barcode scanning works on iPhone through the bundled [ZXing](https://github.com/zxing-js/library) decoder (Apache-2.0, `vendor/`).
