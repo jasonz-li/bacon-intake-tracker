@@ -255,7 +255,7 @@
     $("#foodDlgTitle").textContent = `Add to ${meal}`;
     clearManual();
     ["#qCal", "#qP", "#qC", "#qF"].forEach((s) => ($(s).value = ""));
-    setFoodTab(state.foods.length || state.savedMeals.length ? "mine" : "search");
+    setFoodTab("quick");
     foodDlg.showModal();
   }
 
