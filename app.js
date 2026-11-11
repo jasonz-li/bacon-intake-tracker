@@ -937,6 +937,18 @@
     toast("All data erased");
   };
 
+  // Dialogs: ✕ closes, tapping the dark area outside closes, and pressing Enter in a field doesn't close them
+  $$("[data-close]").forEach((b) => (b.onclick = () => b.closest("dialog").close()));
+  $$("form.dlg").forEach((f) => f.addEventListener("submit", (e) => e.preventDefault()));
+  [foodDlg, exDlg].forEach((d) =>
+    d.addEventListener("click", (e) => {
+      if (e.target !== d) return;
+      const r = d.getBoundingClientRect();
+      const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      if (!inside) d.close();
+    })
+  );
+
   // ---------- Render ----------
   function render() {
     const view = $(".view.active").id;

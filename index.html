@@ -216,7 +216,7 @@
     <form method="dialog" class="dlg">
       <div class="dlg-head">
         <h2 id="foodDlgTitle">Add food</h2>
-        <button class="icon" value="cancel" aria-label="Close">✕</button>
+        <button type="button" class="icon" data-close aria-label="Close">✕</button>
       </div>
       <button type="button" class="btn block scan-cta" id="scanBtn" hidden>📷 Scan a barcode</button>
       <div class="seg" id="foodTabs">
@@ -242,7 +242,7 @@
 
       <div class="tab" data-tab="manual" hidden>
         <p class="muted small" id="fBarcode" hidden></p>
-        <label>Food name <input id="fName" required /></label>
+        <label>Food name <input id="fName" /></label>
         <div class="grid2">
           <label>Serving size <input id="fServing" placeholder="e.g. 1 cup, 100 g" /></label>
           <label>Servings eaten <input type="number" id="fQty" step="0.25" min="0" value="1" /></label>
@@ -277,7 +277,7 @@
     <form method="dialog" class="dlg" id="exForm">
       <div class="dlg-head">
         <h2>Add exercise</h2>
-        <button class="icon" value="cancel" aria-label="Close">✕</button>
+        <button type="button" class="icon" data-close aria-label="Close">✕</button>
       </div>
       <label>Exercise <input id="exName" list="exPresets" placeholder="e.g. Running" /></label>
       <datalist id="exPresets"></datalist>
