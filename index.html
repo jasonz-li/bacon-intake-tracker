@@ -194,7 +194,17 @@
 
       <div class="card">
         <div class="card-head"><h2>Your data</h2></div>
-        <p class="muted small">Everything is stored in this browser only. Back it up now and then.</p>
+        <p class="muted small"><strong>Spreadsheet export.</strong> A .zip of CSV files, like MyFitnessPal's: nutrition per meal, daily totals, every food logged, exercise and weight. Opens in Excel, Numbers or Google Sheets.</p>
+        <div class="row gap" style="margin-bottom:16px">
+          <select id="csvRange" aria-label="Date range">
+            <option value="all">All time</option>
+            <option value="90">Last 90 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="7">Last 7 days</option>
+          </select>
+          <button class="btn" id="csvBtn">Export CSV</button>
+        </div>
+        <p class="muted small"><strong>Full backup.</strong> Everything is stored in this browser only. Back it up now and then. A backup can be imported again; the CSV export can't.</p>
         <div class="row gap wrap">
           <button class="btn ghost" id="exportBtn">Export backup</button>
           <label class="btn ghost filebtn">Import backup<input type="file" id="importFile" accept="application/json" hidden /></label>
